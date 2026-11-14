@@ -15,7 +15,7 @@ import {
   Shirt,
   Smartphone,
   Sofa,
-  Store,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 
@@ -36,10 +36,10 @@ const ICONS: Record<string, LucideIcon> = {
   paw: PawPrint,
   ball: Dumbbell,
   puzzle: Puzzle,
-  store: Store,
+  all: Sparkles,
 };
 
 export function CategoryIcon({ name, className }: { name: string; className?: string }) {
-  const Icon = ICONS[name] ?? Store;
-  return <Icon className={className} aria-hidden />;
+  const Icon = ICONS[name] ?? Sparkles;
+  return <Icon className={className} aria-hidden strokeWidth={1.75} />;
 }

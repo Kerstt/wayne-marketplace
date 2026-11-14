@@ -2,31 +2,33 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { LogOut, MessageCircle, Plus, Tag } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { Avatar } from "./ui";
 
-export function UserMenu({ email }: { email: string }) {
+export function UserMenu({ email, name }: { email: string; name: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const router = useRouter();
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
   }, []);
 
   async function signOut() {
     await createClient().auth.signOut();
     setOpen(false);
-    router.push("/");
-    router.refresh();
+    // Full navigation so every server component (navbar, pages) re-renders logged out.
+    window.location.assign("/");
   }
-
-  const initial = (email[0] ?? "?").toUpperCase();
 
   return (
     <div className="relative" ref={ref}>
@@ -34,19 +36,23 @@ export function UserMenu({ email }: { email: string }) {
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-label="Account menu"
-        className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-brand to-violet-500 text-[15px] font-bold text-white ring-2 ring-white transition hover:opacity-90"
+        aria-expanded={open}
+        className="rounded-full ring-2 ring-transparent transition hover:ring-line"
       >
-        {initial}
+        <Avatar label={name || email} seed={email} size={36} />
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-64 overflow-hidden rounded-xl bg-white p-2 shadow-xl ring-1 ring-black/5">
-          <div className="px-3 py-2">
-            <p className="text-xs text-zinc-500">Signed in as</p>
-            <p className="truncate text-sm font-semibold text-zinc-900">{email}</p>
+        <div className="animate-rise absolute right-0 mt-2 w-64 overflow-hidden rounded-2xl border border-line bg-card p-1.5 shadow-[var(--shadow-lift)]">
+          <div className="flex items-center gap-3 px-3 py-3">
+            <Avatar label={name || email} seed={email} size={36} />
+            <div className="min-w-0">
+              <p className="truncate text-[14px] font-semibold">{name || "Your account"}</p>
+              <p className="truncate font-mono text-[11px] text-ink-3">{email}</p>
+            </div>
           </div>
-          <hr className="my-1 border-zinc-200" />
+          <div className="my-1 border-t border-dashed border-line" />
           <MenuLink href="/create" icon={<Plus className="h-4 w-4" />} onClick={() => setOpen(false)}>
-            Create listing
+            Sell something
           </MenuLink>
           <MenuLink href="/selling" icon={<Tag className="h-4 w-4" />} onClick={() => setOpen(false)}>
             Your listings
@@ -54,14 +60,13 @@ export function UserMenu({ email }: { email: string }) {
           <MenuLink href="/inbox" icon={<MessageCircle className="h-4 w-4" />} onClick={() => setOpen(false)}>
             Inbox
           </MenuLink>
+          <div className="my-1 border-t border-dashed border-line" />
           <button
             type="button"
             onClick={signOut}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-[15px] font-medium text-zinc-900 hover:bg-zinc-100"
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-medium text-ink-2 transition hover:bg-paper hover:text-accent"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-200">
-              <LogOut className="h-4 w-4" />
-            </span>
+            <LogOut className="h-4 w-4" />
             Log out
           </button>
         </div>
@@ -85,9 +90,9 @@ function MenuLink({
     <Link
       href={href}
       onClick={onClick}
-      className="flex items-center gap-3 rounded-lg px-3 py-2 text-[15px] font-medium text-zinc-900 hover:bg-zinc-100"
+      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] font-medium text-ink transition hover:bg-paper"
     >
-      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-200">{icon}</span>
+      <span className="text-ink-3">{icon}</span>
       {children}
     </Link>
   );
