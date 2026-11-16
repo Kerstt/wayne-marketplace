@@ -54,8 +54,14 @@ export default async function BrowsePage({ searchParams }: { searchParams: Searc
     for (const w of words) query = query.or(`title.ilike.%${w}%,description.ilike.%${w}%`);
   }
 
-  const { data, error } = await query;
+  const [{ data, error }, { data: payable }] = await Promise.all([
+    query,
+    supabase.from("sellers").select("user_id").eq("charges_enabled", true),
+  ]);
   const listings = (data ?? []) as Listing[];
+  const payableSellers = new Set((payable ?? []).map((s) => s.user_id as string));
+  const isBuyable = (l: Listing) => l.status === "active" && Number(l.price) >= 0.5 && payableSellers.has(l.user_id);
+  const activeCount = listings.filter((l) => l.status !== "sold").length;
   const keep = {
     q,
     category,
@@ -63,10 +69,12 @@ export default async function BrowsePage({ searchParams }: { searchParams: Searc
     sort: sortKey === "newest" ? undefined : sortKey,
   };
   const filtered = !!(q || category);
-  const showBento = !filtered && view === "grid" && sortKey === "newest" && listings.length >= 7;
-  const featured = showBento ? listings[0] : undefined;
-  const side = showBento ? listings.slice(1, 7) : [];
-  const rest = showBento ? listings.slice(7) : listings;
+  const firstActive = listings.find((l) => l.status !== "sold");
+  const showBento = !filtered && view === "grid" && sortKey === "newest" && listings.length >= 7 && !!firstActive;
+  const featured = showBento ? firstActive : undefined;
+  const others = listings.filter((l) => l !== featured);
+  const side = showBento ? others.slice(0, 6) : [];
+  const rest = showBento ? others.slice(6) : listings;
 
   return (
     <main>
@@ -80,7 +88,7 @@ export default async function BrowsePage({ searchParams }: { searchParams: Searc
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
                 </span>
-                {listings.length} things for sale nearby
+                {activeCount} things for sale nearby
               </p>
               <h1 className="mt-4 font-serif text-[56px] leading-[0.9] tracking-[-0.02em] sm:text-[80px] lg:text-[104px]">
                 Good stuff,
@@ -220,10 +228,10 @@ export default async function BrowsePage({ searchParams }: { searchParams: Searc
 
         {featured && (
           <section className="mb-14 grid gap-4 lg:grid-cols-[1.05fr_1fr]">
-            <FeaturedCard listing={featured} />
+            <FeaturedCard listing={featured} buyable={isBuyable(featured)} />
             <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3">
               {side.map((l, i) => (
-                <ListingCard key={l.id} listing={l} index={i + 1} square />
+                <ListingCard key={l.id} listing={l} index={i + 1} square buyable={isBuyable(l)} />
               ))}
             </div>
           </section>
@@ -240,7 +248,7 @@ export default async function BrowsePage({ searchParams }: { searchParams: Searc
           (view === "grid" ? (
             <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {rest.map((l, i) => (
-                <ListingCard key={l.id} listing={l} index={i} />
+                <ListingCard key={l.id} listing={l} index={i} buyable={isBuyable(l)} />
               ))}
             </div>
           ) : (
@@ -253,7 +261,7 @@ export default async function BrowsePage({ searchParams }: { searchParams: Searc
                 <span className="text-right">Price</span>
               </div>
               {rest.map((l) => (
-                <ListingRow key={l.id} listing={l} />
+                <ListingRow key={l.id} listing={l} buyable={isBuyable(l)} />
               ))}
             </div>
           ))}

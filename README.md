@@ -11,6 +11,27 @@ A Facebook Marketplace–style app built with **Next.js 15 (App Router) + React 
 - **Inbox** – sellers see messages received (with "Reply by email"); buyers see messages they sent.
 - **Your listings** – manage and delete your listings (deletes the photo too).
 
+## Payments: Stripe Connect (sandbox)
+
+| Step | How it works | Code |
+|---|---|---|
+| **Seller onboarding** | A seller opens **Get paid** (`/payouts`) and clicks **Connect with Stripe**. We create a connected account (Stripe-hosted onboarding, no separate Stripe login), save its `acct_…` ID in `sellers`, and redirect to Stripe. On return we refresh the status from Stripe. | [`api/stripe/connect`](src/app/api/stripe/connect/route.ts), [`payouts/page.tsx`](src/app/payouts/page.tsx) |
+| **Buy Now** | Listings from sellers with `charges_enabled` show **Buy Now** (no login needed). Unconnected sellers, free items and sold items aren't purchasable. | [`BuyNow.tsx`](src/components/BuyNow.tsx), [`api/stripe/checkout`](src/app/api/stripe/checkout/route.ts) |
+| **Pay the seller** | Checkout Session is a **direct charge** on the seller's connected account (`stripeAccount` header) with `application_fee_amount` = **10%** to the platform. | [`lib/stripe.ts`](src/lib/stripe.ts) |
+| **Confirmation** | A **Connect webhook** (`checkout.session.completed`, signature-verified) marks the order `paid` and the listing `sold`. The success page shows a receipt; if the webhook is late it confirms with Stripe directly. Fulfilment is idempotent; if two buyers race, the second is refunded automatically. Events for other apps' sessions/accounts in the shared sandbox are ignored with `200`. | [`api/stripe/webhook`](src/app/api/stripe/webhook/route.ts), [`lib/orders.ts`](src/lib/orders.ts), [`orders/success`](src/app/orders/success/page.tsx) |
+
+Tables (see [`0003_stripe_connect.sql`](supabase/migrations/0003_stripe_connect.sql)): `sellers` (user → `stripe_account_id`, capability flags), `orders` (session, amount, fee, buyer email, status, `confirmed_via`), and `listings.status` / `sold_at`. Only the server (service-role key) can write them; a trigger stops sellers from flipping a listing's status themselves.
+
+**Test data:** card `4242 4242 4242 4242`, any future expiry and CVC. Onboarding: phone `000 000 0000`, SMS code `000000`, DOB `01/01/1901`, address line 1 `address_full_match`, SSN `000-00-0000`, routing `110000000`, account `000123456789`.
+
+**Webhook registration** (once, after the production deploy):
+
+```bash
+node --env-file=.env.local scripts/create-webhook.mjs https://YOUR-APP.vercel.app
+```
+
+Put the printed `whsec_…` in `STRIPE_WEBHOOK_SECRET` (in `.env.local` and Vercel) and redeploy.
+
 ## Design
 
 The look is a "neighborhood flea market" style: warm paper and ink, a vermilion accent, yellow price-sticker tags, and taped polaroids. All tokens live in [`src/app/globals.css`](src/app/globals.css).
@@ -29,8 +50,8 @@ Shared primitives (`PriceTag`, `Logo`, `Avatar`, button and input styles) are in
 
 ## Setup
 
-1. In your Supabase project's **SQL Editor**, run the files in [`supabase/migrations/`](supabase/migrations) in order (`0001_…`, then `0002_…`).
-2. Copy `.env.example` to `.env.local` and fill in your Project URL and anon/publishable key.
+1. In your Supabase project's **SQL Editor**, run the files in [`supabase/migrations/`](supabase/migrations) in order (`0001_…`, `0002_…`, `0003_…`).
+2. Copy `.env.example` to `.env.local` and fill in every value (Supabase URL, anon key, service-role key, Stripe keys, webhook secret).
 3. `npm install` and then `npm run dev`. Open http://localhost:3000.
 
 Optional demo data (12 listings with photos, owned by an existing account):

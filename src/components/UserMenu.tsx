@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { LogOut, MessageCircle, Plus, Tag } from "lucide-react";
+import { LogOut, MessageCircle, Plus, Tag, Wallet } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar } from "./ui";
 
@@ -59,6 +59,9 @@ export function UserMenu({ email, name }: { email: string; name: string }) {
           </MenuLink>
           <MenuLink href="/inbox" icon={<MessageCircle className="h-4 w-4" />} onClick={() => setOpen(false)}>
             Inbox
+          </MenuLink>
+          <MenuLink href="/payouts" icon={<Wallet className="h-4 w-4" />} onClick={() => setOpen(false)}>
+            Get paid · Stripe
           </MenuLink>
           <div className="my-1 border-t border-dashed border-line" />
           <button

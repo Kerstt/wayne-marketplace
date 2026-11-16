@@ -43,3 +43,6 @@ next-env.d.ts
 
 # local test credentials (never commit)
 supabase/test-accounts.md
+
+.vercel
+.env*

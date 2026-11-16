@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { MessageCircle, Plus, Search } from "lucide-react";
+import { MessageCircle, Plus, Search, Wallet } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { UserMenu } from "./UserMenu";
 import { MobileTabBar } from "./MobileTabBar";
@@ -39,6 +39,12 @@ export async function Navbar() {
                   className="hidden items-center gap-2 rounded-full px-3 py-2 text-[14px] font-medium text-ink-2 transition hover:bg-paper-2 hover:text-ink md:flex"
                 >
                   <MessageCircle className="h-4 w-4" /> Inbox
+                </Link>
+                <Link
+                  href="/payouts"
+                  className="hidden items-center gap-2 rounded-full px-3 py-2 text-[14px] font-medium text-ink-2 transition hover:bg-paper-2 hover:text-ink lg:flex"
+                >
+                  <Wallet className="h-4 w-4" /> Get paid
                 </Link>
                 <Link
                   href="/create"

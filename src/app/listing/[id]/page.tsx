@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ImageOff, Mail, MapPin, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BadgeCheck, ImageOff, Info, Mail, MapPin, ShieldCheck, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import type { Listing } from "@/lib/types";
 import { timeAgo } from "@/lib/format";
+import { BuyNow } from "@/components/BuyNow";
 import { getCategory } from "@/lib/categories";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { ListingCard } from "@/components/ListingCard";
@@ -23,8 +24,15 @@ export async function generateMetadata({ params }: { params: Params }) {
   return { title: data ? `${data.title} · Wayne Market` : "Listing not found" };
 }
 
-export default async function ListingPage({ params }: { params: Params }) {
+export default async function ListingPage({
+  params,
+  searchParams,
+}: {
+  params: Params;
+  searchParams: Promise<{ canceled?: string; error?: string }>;
+}) {
   const { id } = await params;
+  const sp = await searchParams;
   if (!UUID_RE.test(id)) notFound();
 
   const supabase = await createClient();
@@ -39,6 +47,16 @@ export default async function ListingPage({ params }: { params: Params }) {
   const user = auth.user;
   const isOwner = user?.id === listing.user_id;
   const cat = getCategory(listing.category);
+  const isSold = listing.status === "sold";
+
+  const { data: seller } = await supabase
+    .from("sellers")
+    .select("charges_enabled")
+    .eq("user_id", listing.user_id)
+    .maybeSingle();
+  const sellerCanCharge = !!seller?.charges_enabled;
+  const isFree = Number(listing.price) < 0.5;
+  const canBuy = !isSold && sellerCanCharge && !isFree && !isOwner;
 
   const { data: relatedData } = await supabase
     .from("listings")
@@ -92,8 +110,9 @@ export default async function ListingPage({ params }: { params: Params }) {
               <ImageOff className="h-16 w-16 text-ink-3" />
             )}
             <span className="eyebrow absolute left-4 top-4 rounded-full bg-card/90 px-3 py-1.5 text-ink-2 backdrop-blur">
-              Listed {timeAgo(listing.created_at)}
+              {isSold && listing.sold_at ? `Sold ${timeAgo(listing.sold_at)}` : `Listed ${timeAgo(listing.created_at)}`}
             </span>
+            {isSold && <SoldStamp />}
           </div>
         </div>
 
@@ -118,7 +137,20 @@ export default async function ListingPage({ params }: { params: Params }) {
           </h1>
 
           <div className="mt-5 flex flex-wrap items-center gap-3">
-            <PriceTag price={listing.price} size="lg" className="-rotate-2" testId="listing-price" />
+            <PriceTag
+              price={listing.price}
+              size="lg"
+              className={`-rotate-2 ${isSold ? "line-through opacity-50" : ""}`}
+              testId="listing-price"
+            />
+            {isSold && (
+              <span
+                className="rotate-2 rounded-full bg-ink px-3 py-1 font-mono text-[13px] font-semibold tracking-wider text-paper"
+                data-testid="sold-badge"
+              >
+                SOLD
+              </span>
+            )}
             {listing.location && (
               <span className="inline-flex items-center gap-1.5 text-[14px] text-ink-2">
                 <MapPin className="h-4 w-4 text-accent" />
@@ -127,13 +159,48 @@ export default async function ListingPage({ params }: { params: Params }) {
             )}
           </div>
 
-          <div className="mt-6">
-            {isOwner ? (
+          {(sp.canceled || sp.error) && !isSold && (
+            <p
+              role="status"
+              className={`mt-5 flex items-start gap-2 rounded-2xl px-4 py-3 text-[14px] ${
+                sp.error ? "border border-accent/30 bg-accent/10 text-accent-dark" : "bg-paper-2 text-ink-2"
+              }`}
+            >
+              {sp.error ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> : <Info className="mt-0.5 h-4 w-4 shrink-0" />}
+              {sp.error ?? "Checkout canceled. You weren't charged."}
+            </p>
+          )}
+
+          <div className="mt-6 space-y-3">
+            {isSold ? (
+              <div className="rounded-[22px] border border-line bg-card p-5" data-testid="sold-panel">
+                <p className="font-serif text-[28px] leading-none">This one&apos;s gone.</p>
+                <p className="mt-2 text-[14px] text-ink-2">
+                  It sold {listing.sold_at ? timeAgo(listing.sold_at) : "recently"} through Wayne Market checkout.
+                </p>
+                <Link
+                  href={`/?category=${listing.category}`}
+                  className="mt-4 inline-flex rounded-full bg-ink px-5 py-2.5 text-[14px] font-semibold text-paper transition hover:bg-accent"
+                >
+                  See similar items
+                </Link>
+              </div>
+            ) : isOwner ? (
               <div className="rounded-[22px] border border-line bg-card p-5">
                 <p className="eyebrow text-accent">Your listing</p>
-                <p className="mt-1.5 text-[15px] text-ink-2">
-                  Buyers&apos; messages land in your inbox. You can reply to them by email.
-                </p>
+                {sellerCanCharge ? (
+                  <p className="mt-1.5 flex items-center gap-1.5 text-[15px] text-ink-2">
+                    <BadgeCheck className="h-4 w-4 text-leaf" /> Buy Now is on. Buyers can pay you by card.
+                  </p>
+                ) : (
+                  <p className="mt-1.5 text-[15px] text-ink-2">
+                    Buyers can only message you.{" "}
+                    <Link href="/payouts" className="font-semibold text-ink underline decoration-accent decoration-2 underline-offset-4">
+                      Connect with Stripe
+                    </Link>{" "}
+                    to turn on Buy Now.
+                  </p>
+                )}
                 <div className="mt-4 flex gap-2">
                   <Link
                     href="/inbox"
@@ -145,16 +212,27 @@ export default async function ListingPage({ params }: { params: Params }) {
                 </div>
               </div>
             ) : (
-              <MessageSeller
-                listingId={listing.id}
-                listingTitle={listing.title}
-                sellerEmail={listing.email}
-                user={
-                  user
-                    ? { email: user.email ?? "", name: (user.user_metadata?.full_name as string) ?? "" }
-                    : null
-                }
-              />
+              <>
+                {canBuy && <BuyNow listingId={listing.id} price={listing.price} />}
+                <MessageSeller
+                  listingId={listing.id}
+                  listingTitle={listing.title}
+                  sellerEmail={listing.email}
+                  user={
+                    user
+                      ? { email: user.email ?? "", name: (user.user_metadata?.full_name as string) ?? "" }
+                      : null
+                  }
+                />
+                {!canBuy && (
+                  <p className="flex items-start gap-2 text-[12px] leading-relaxed text-ink-3" data-testid="not-purchasable">
+                    <Zap className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    {isFree
+                      ? "This one's free. Just message the seller to arrange pickup."
+                      : "Online checkout isn't available for this item yet because the seller hasn't connected Stripe. Message them to buy."}
+                  </p>
+                )}
+              </>
             )}
           </div>
 
@@ -219,6 +297,17 @@ export default async function ListingPage({ params }: { params: Params }) {
         </section>
       )}
     </main>
+  );
+}
+
+function SoldStamp() {
+  return (
+    <span
+      aria-hidden
+      className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-12 rounded-xl border-[5px] border-accent px-6 py-2 font-mono text-[56px] font-semibold tracking-[0.2em] text-accent opacity-90 mix-blend-multiply sm:text-[80px]"
+    >
+      SOLD
+    </span>
   );
 }
 
