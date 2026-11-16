@@ -25,22 +25,17 @@ async function startOnboarding(req: NextRequest) {
     let seller = existing as Seller | null;
 
     if (!seller) {
-      // Connected account with Stripe-hosted onboarding and no separate Stripe dashboard login:
-      // Stripe collects the seller's details (and is liable for losses), the seller pays Stripe's
-      // processing fees, and we charge on this account directly (direct charges).
-      // (A full-dashboard "Standard" account would force sellers through a Stripe user login + 2FA.)
-      const account = await stripe().accounts.create({
-        country: "US",
-        email: user.email,
-        business_type: "individual",
-        capabilities: { card_payments: { requested: true }, transfers: { requested: true } },
-        controller: {
-          stripe_dashboard: { type: "none" },
-          fees: { payer: "account" },
-          losses: { payments: "stripe" },
-          requirement_collection: "stripe",
-        },
-        business_profile: { product_description: "Secondhand items sold on Wayne Market" },
+      // Accounts v2 connected account with Stripe-hosted onboarding and no separate Stripe
+      // dashboard login. Stripe collects the seller's details and is liable for losses, the seller
+      // pays Stripe's processing fees, and we charge on this account directly (direct charges),
+      // so it needs the "merchant" configuration with card payments.
+      const account = await stripe().v2.core.accounts.create({
+        contact_email: user.email,
+        display_name: (user.user_metadata?.full_name as string | undefined)?.trim() || user.email,
+        identity: { country: "US" },
+        dashboard: "none",
+        defaults: { responsibilities: { fees_collector: "stripe", losses_collector: "stripe" } },
+        configuration: { merchant: { capabilities: { card_payments: { requested: true } } } },
         metadata: { app: APP_TAG, user_id: user.id },
       });
       const { data: inserted, error } = await admin
@@ -52,11 +47,16 @@ async function startOnboarding(req: NextRequest) {
       seller = inserted as Seller;
     }
 
-    const link = await stripe().accountLinks.create({
+    const link = await stripe().v2.core.accountLinks.create({
       account: seller.stripe_account_id,
-      type: "account_onboarding",
-      refresh_url: `${origin}/api/stripe/connect`,
-      return_url: `${origin}/payouts?onboarding=return`,
+      use_case: {
+        type: "account_onboarding",
+        account_onboarding: {
+          refresh_url: `${origin}/api/stripe/connect`,
+          return_url: `${origin}/payouts?onboarding=return`,
+          collection_options: { fields: "currently_due" },
+        },
+      },
     });
     return NextResponse.redirect(link.url, 303);
   } catch (err) {
